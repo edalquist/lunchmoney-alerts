@@ -1,8 +1,10 @@
 package org.dalquist.lunchmoney.alerts
 
+import com.google.cloud.functions.CloudEventsFunction
 import com.google.cloud.functions.HttpFunction
 import com.google.cloud.functions.HttpRequest
 import com.google.cloud.functions.HttpResponse
+import io.cloudevents.CloudEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -13,14 +15,20 @@ import org.dalquist.lunchmoney.api.LunchMoneyImpl
 import org.dalquist.lunchmoney.model.PlaidAccount
 import java.io.BufferedWriter
 import java.io.IOException
+import java.io.StringWriter
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.util.Properties
+import java.util.logging.Logger
 
-class BalanceAlert : HttpFunction {
-  private val currFormat = DecimalFormat("$#,###,###,##0.00")
-  private val ratioFormat = DecimalFormat("0.00")
-  private val clock: Clock = Clock.System
+class BalanceAlert : HttpFunction, CloudEventsFunction {
+  companion object {
+    val LOG = Logger.getLogger(BalanceAlert::class.java.name)
+    val currFormat = DecimalFormat("$#,###,###,##0.00")
+    val ratioFormat = DecimalFormat("0.00")
+    val clock: Clock = Clock.System
+  }
+
   private val lunchMoney: LunchMoney
   private val notifier: Notifier
   private val primaryAccount: String
@@ -62,6 +70,19 @@ class BalanceAlert : HttpFunction {
     }
 
     response.writer.write("</body></html>")
+  }
+
+
+  override fun accept(event: CloudEvent?) {
+    val sw = StringWriter()
+    val writer = BufferedWriter(sw)
+    runBlocking {
+      launch {
+        doAlert(writer)
+      }
+    }
+
+    println(sw.toString())
   }
 
   private suspend fun doAlert(writer: BufferedWriter) {
@@ -136,6 +157,7 @@ class BalanceAlert : HttpFunction {
   }
 
   private suspend fun write(writer: BufferedWriter, str: String) {
+    LOG.info(str)
     withContext(Dispatchers.IO) {
       writer.write(str)
     }

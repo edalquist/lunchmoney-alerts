@@ -14,12 +14,26 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
     <kotlin.version>2.0.0</kotlin.version>
     <serialization.version>1.7.1</serialization.version>
     <kotlin.code.style>official</kotlin.code.style>
     <junit.version>4.13.1</junit.version>
     <ktor.version>2.3.12</ktor.version>
   </properties>
+
+  <!--  <dependencyManagement>-->
+  <!--    <dependencies>-->
+  <!--      <dependency>-->
+  <!--        <groupId>com.google.cloud</groupId>-->
+  <!--        <artifactId>libraries-bom</artifactId>-->
+  <!--        <version>26.42.0</version>-->
+  <!--        <type>pom</type>-->
+  <!--        <scope>import</scope>-->
+  <!--      </dependency>-->
+  <!--    </dependencies>-->
+  <!--  </dependencyManagement>-->
 
   <dependencies>
     <dependency>
@@ -46,6 +60,10 @@
       <version>1.1.0</version>
       <scope>provided</scope>
     </dependency>
+    <!--    <dependency>-->
+    <!--      <groupId>com.google.cloud</groupId>-->
+    <!--      <artifactId>google-cloud-pubsub</artifactId>-->
+    <!--    </dependency>-->
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>
       <artifactId>okhttp</artifactId>
@@ -170,6 +188,40 @@
             <version>${kotlin.version}</version>
           </dependency>
         </dependencies>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>21</source>
+          <target>21</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <outputFile>${project.build.directory}/deployment/${build.finalName}.jar</outputFile>
+              <transformers>
+                <!-- This may be needed if you need to shade a signed JAR -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resource>.SF</resource>
+                  <resource>.DSA</resource>
+                  <resource>.RSA</resource>
+                </transformer>
+                <!-- This is needed if you have dependencies that use Service Loader. Most Google Cloud client libraries does. -->
+                <transformer implementation=
+                                     "org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
