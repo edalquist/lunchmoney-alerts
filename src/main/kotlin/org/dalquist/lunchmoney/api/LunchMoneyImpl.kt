@@ -6,10 +6,10 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.logging.DEFAULT
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
@@ -23,8 +23,8 @@ import org.dalquist.lunchmoney.model.PlaidAccounts
 class LunchMoneyImpl(private val apiKey: String) : LunchMoney {
   private val httpClient = HttpClient(CIO) {
     install(Logging) {
-      logger = Logger.SIMPLE
-      level = LogLevel.ALL
+      logger = Logger.DEFAULT
+      level = LogLevel.NONE
     }
     defaultRequest {
       header(HttpHeaders.Authorization, "Bearer $apiKey")

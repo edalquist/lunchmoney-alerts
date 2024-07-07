@@ -18,20 +18,35 @@ import java.text.DecimalFormat
 import java.util.Properties
 
 class BalanceAlert : HttpFunction {
+  private val currFormat = DecimalFormat("$#,###,###,##0.00")
+  private val ratioFormat = DecimalFormat("0.00")
   private val clock: Clock = Clock.System
   private val lunchMoney: LunchMoney
+  private val notifier: Notifier
   private val primaryAccount: String
-  private val CF = DecimalFormat("$#,###,###,##0.00")
+  private val totalRatio: Double
+  private val primaryRatio: Double
 
   init {
-    val properties = Properties()
+    val conf = Properties()
     val file = this::class.java.classLoader.getResourceAsStream("config.properties")
-    properties.load(file)
+    conf.load(file)
 
-    val apiKey = properties.getProperty("api_key")
-    lunchMoney = LunchMoneyImpl(apiKey)
+    primaryAccount = conf.getProperty("primary_account")
+    lunchMoney = LunchMoneyImpl(conf.getProperty("api_key"))
 
-    primaryAccount = properties.getProperty("primary_account")
+    val smtpUser = conf.getProperty("smtp_user")
+    notifier = SmtpNotifier(
+      user = smtpUser,
+      pass = conf.getProperty("smtp_pass"),
+      server = conf.getProperty("smtp_server"),
+      to = conf.getProperty("smtp_to"),
+      from = conf.getProperty("smtp_from", smtpUser),
+      port = conf.getProperty("smtp_port", "587").toInt()
+    )
+
+    totalRatio = conf.getProperty("total_ratio", "4").toDouble()
+    primaryRatio = conf.getProperty("primary_ratio", "1.5").toDouble()
   }
 
   // Simple function to return "Hello World"
@@ -57,23 +72,41 @@ class BalanceAlert : HttpFunction {
     val creditBalance = getTotalBalance(accountsByType["credit"]).negate()
 
     val depositoryBalance = getTotalBalance(accountsByType["depository"])
-    val depositoryDiff = depositoryBalance.plus(creditBalance.multiply(BigDecimal(4))).negate().max(BigDecimal.ZERO)
+    val depositoryDiff =
+      depositoryBalance.plus(creditBalance.multiply(BigDecimal(totalRatio))).negate().max(BigDecimal.ZERO)
 
     val primaryBalance =
       accountsByType["depository"]?.find { a -> primaryAccount == a.displayName }?.balance ?: BigDecimal.ZERO
-    val primaryDiff = primaryBalance.plus(creditBalance.multiply(BigDecimal(2))).negate().max(BigDecimal.ZERO)
+    val primaryDiff =
+      primaryBalance.plus(creditBalance.multiply(BigDecimal(primaryRatio))).negate().max(BigDecimal.ZERO)
 
-    write(writer, "Credit Balance: ${CF.format(creditBalance)}<br>")
-
-    write(writer, "Deposit Balance: ${CF.format(depositoryBalance)}<br>")
+    var msg = ""
     if (depositoryDiff.toDouble() > 0) {
-      write(writer, "ALERT: Increase Total Deposits by ${CF.format(depositoryDiff)}<br>")
+      val ratio = depositoryBalance.div(creditBalance.negate())
+      msg += "\n\n" + """
+        **ALERT**: Total Deposits are low at ${currFormat.format(depositoryBalance)}
+          * Ratio is ${ratioFormat.format(ratio)}x and should be at least ${totalRatio}x.
+          * Increase by ${currFormat.format(depositoryDiff)}
+      """.trimIndent()
+    }
+    if (primaryDiff.toDouble() > 0) {
+      val ratio = primaryBalance.div(creditBalance.negate())
+      msg += "\n\n" + """
+        **ALERT**: ${primaryAccount} is low at ${currFormat.format(primaryBalance)}
+          * Ratio is ${ratioFormat.format(ratio)}x and should be at least ${primaryRatio}x.
+          * Increase by ${currFormat.format(primaryDiff)}
+      """.trimIndent()
     }
 
-    write(writer, "Primary Balance: ${CF.format(primaryBalance)}<br>")
-    if (primaryDiff.toDouble() > 0) {
-      write(writer, "ALERT: Increase Primary Deposits by ${CF.format(primaryDiff)}<br>")
+    if (msg.isNotBlank()) {
+      msg = """
+        Current Credit Balance: ${currFormat.format(creditBalance)}
+      """.trimIndent() + msg
+      notifier.send("Balances Low", msg)
+
+      write(writer, "<pre>${msg}</pre>")
     }
+
     write(writer, "<br>")
 
     write(writer, "Accounts<ul>\n")
@@ -84,7 +117,7 @@ class BalanceAlert : HttpFunction {
         val sinceLastUpdate = clock.now().minus(account.balanceLastUpdate)
         write(
           writer,
-          "<li>${account.displayName} with balance ${CF.format(account.balance)} last updated $sinceLastUpdate ago\n"
+          "<li>${account.displayName} with balance ${currFormat.format(account.balance)} last updated $sinceLastUpdate ago\n"
         )
       }
       write(writer, "</ul>\n")
