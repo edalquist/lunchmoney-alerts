@@ -20,7 +20,7 @@
     <serialization.version>1.7.1</serialization.version>
     <kotlin.code.style>official</kotlin.code.style>
     <junit.version>4.13.1</junit.version>
-    <ktor.version>2.3.12</ktor.version>
+    <ktor.version>2.3.13</ktor.version>
   </properties>
 
   <!--  <dependencyManagement>-->
